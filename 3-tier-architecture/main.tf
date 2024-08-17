@@ -204,7 +204,7 @@ resource "aws_instance" "webserver1" {
   instance_type          = var.instance_type
   vpc_security_group_ids = [aws_security_group.webSg.id]
   subnet_id              = aws_subnet.sub1.id
-  user_data              = base64encode(file("web_userdata.sh"))
+  user_data              = base64encode(file("userdata.sh"))
 }
 
 resource "aws_instance" "webserver2" {
@@ -212,7 +212,7 @@ resource "aws_instance" "webserver2" {
   instance_type          = var.instance_type
   vpc_security_group_ids = [aws_security_group.webSg.id]
   subnet_id              = aws_subnet.sub2.id
-  user_data              = base64encode(file("web_userdata.sh"))
+  user_data              = base64encode(file("userdata.sh"))
 }
 
 # EC2 Instances - Logic Tier
@@ -221,7 +221,7 @@ resource "aws_instance" "appserver1" {
   instance_type          = var.instance_type
   vpc_security_group_ids = [aws_security_group.appSg.id]
   subnet_id              = aws_subnet.private_sub1.id
-  user_data              = base64encode(file("app_userdata.sh"))
+  user_data              = base64encode(file("userdata1.sh"))
 }
 
 resource "aws_instance" "appserver2" {
@@ -229,7 +229,7 @@ resource "aws_instance" "appserver2" {
   instance_type          = var.instance_type
   vpc_security_group_ids = [aws_security_group.appSg.id]
   subnet_id              = aws_subnet.private_sub2.id
-  user_data              = base64encode(file("app_userdata.sh"))
+  user_data              = base64encode(file("userdata1.sh"))
 }
 
 # RDS Instance - Data Tier
