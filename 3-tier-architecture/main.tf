@@ -1,25 +1,55 @@
+# VPC
 resource "aws_vpc" "myvpc" {
   cidr_block = var.cidr
 }
 
+# Public Subnets for Web Tier
 resource "aws_subnet" "sub1" {
   vpc_id                  = aws_vpc.myvpc.id
-  cidr_block              = "10.0.0.0/24"
+  cidr_block              = var.public_subnet1_cidr
   availability_zone       = "us-east-1a"
   map_public_ip_on_launch = true
 }
 
 resource "aws_subnet" "sub2" {
   vpc_id                  = aws_vpc.myvpc.id
-  cidr_block              = "10.0.1.0/24"
+  cidr_block              = var.public_subnet2_cidr
   availability_zone       = "us-east-1b"
   map_public_ip_on_launch = true
 }
 
+# Private Subnets for Logic Tier
+resource "aws_subnet" "private_sub1" {
+  vpc_id            = aws_vpc.myvpc.id
+  cidr_block        = var.private_subnet1_cidr
+  availability_zone = "us-east-1a"
+}
+
+resource "aws_subnet" "private_sub2" {
+  vpc_id            = aws_vpc.myvpc.id
+  cidr_block        = var.private_subnet2_cidr
+  availability_zone = "us-east-1b"
+}
+
+# Private Subnets for Data Tier (Database)
+resource "aws_subnet" "db_sub1" {
+  vpc_id            = aws_vpc.myvpc.id
+  cidr_block        = var.db_subnet1_cidr
+  availability_zone = "us-east-1a"
+}
+
+resource "aws_subnet" "db_sub2" {
+  vpc_id            = aws_vpc.myvpc.id
+  cidr_block        = var.db_subnet2_cidr
+  availability_zone = "us-east-1b"
+}
+
+# Internet Gateway
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.myvpc.id
 }
 
+# Route Table and Association for Public Subnets
 resource "aws_route_table" "RT" {
   vpc_id = aws_vpc.myvpc.id
 
@@ -39,6 +69,7 @@ resource "aws_route_table_association" "rta2" {
   route_table_id = aws_route_table.RT.id
 }
 
+# Security Groups
 resource "aws_security_group" "webSg" {
   name   = "web"
   vpc_id = aws_vpc.myvpc.id
@@ -70,28 +101,55 @@ resource "aws_security_group" "webSg" {
   }
 }
 
-resource "aws_s3_bucket" "example" {
-  bucket = "abhisheksterraform2023project"
+resource "aws_security_group" "appSg" {
+  name   = "app"
+  vpc_id = aws_vpc.myvpc.id
+
+  ingress {
+    description = "HTTP from Web Tier"
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = [aws_subnet.private_sub1.cidr_block, aws_subnet.private_sub2.cidr_block]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "App-sg"
+  }
 }
 
+resource "aws_security_group" "dbSg" {
+  name   = "db"
+  vpc_id = aws_vpc.myvpc.id
 
-resource "aws_instance" "webserver1" {
-  ami                    = "ami-0261755bbcb8c4a84"
-  instance_type          = "t2.micro"
-  vpc_security_group_ids = [aws_security_group.webSg.id]
-  subnet_id              = aws_subnet.sub1.id
-  user_data              = base64encode(file("userdata.sh"))
+  ingress {
+    description = "MySQL from App Tier"
+    from_port   = 3306
+    to_port     = 3306
+    protocol    = "tcp"
+    cidr_blocks = [aws_subnet.db_sub1.cidr_block, aws_subnet.db_sub2.cidr_block]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "DB-sg"
+  }
 }
 
-resource "aws_instance" "webserver2" {
-  ami                    = "ami-0261755bbcb8c4a84"
-  instance_type          = "t2.micro"
-  vpc_security_group_ids = [aws_security_group.webSg.id]
-  subnet_id              = aws_subnet.sub2.id
-  user_data              = base64encode(file("userdata1.sh"))
-}
-
-#create alb
+# Application Load Balancer (ALB)
 resource "aws_lb" "myalb" {
   name               = "myalb"
   internal           = false
@@ -140,6 +198,60 @@ resource "aws_lb_listener" "listener" {
   }
 }
 
-output "loadbalancerdns" {
-  value = aws_lb.myalb.dns_name
+# EC2 Instances - Web Tier
+resource "aws_instance" "webserver1" {
+  ami                    = "ami-0261755bbcb8c4a84"
+  instance_type          = var.instance_type
+  vpc_security_group_ids = [aws_security_group.webSg.id]
+  subnet_id              = aws_subnet.sub1.id
+  user_data              = base64encode(file("userdata/web_userdata.sh"))
+}
+
+resource "aws_instance" "webserver2" {
+  ami                    = "ami-0261755bbcb8c4a84"
+  instance_type          = var.instance_type
+  vpc_security_group_ids = [aws_security_group.webSg.id]
+  subnet_id              = aws_subnet.sub2.id
+  user_data              = base64encode(file("userdata/web_userdata.sh"))
+}
+
+# EC2 Instances - Logic Tier
+resource "aws_instance" "appserver1" {
+  ami                    = "ami-0261755bbcb8c4a84"
+  instance_type          = var.instance_type
+  vpc_security_group_ids = [aws_security_group.appSg.id]
+  subnet_id              = aws_subnet.private_sub1.id
+  user_data              = base64encode(file("userdata/app_userdata.sh"))
+}
+
+resource "aws_instance" "appserver2" {
+  ami                    = "ami-0261755bbcb8c4a84"
+  instance_type          = var.instance_type
+  vpc_security_group_ids = [aws_security_group.appSg.id]
+  subnet_id              = aws_subnet.private_sub2.id
+  user_data              = base64encode(file("userdata/app_userdata.sh"))
+}
+
+# RDS Instance - Data Tier
+resource "aws_db_subnet_group" "mydb_subnet_group" {
+  name       = "mydb-subnet-group"
+  subnet_ids = [aws_subnet.db_sub1.id, aws_subnet.db_sub2.id]
+
+  tags = {
+    Name = "mydb-subnet-group"
+  }
+}
+
+resource "aws_db_instance" "mydb" {
+  allocated_storage    = 20
+  storage_type         = "gp2"
+  engine               = "mysql"
+  engine_version       = "8.0"
+  instance_class       = var.db_instance_class
+  name                 = "mydb"
+  username             = "admin"
+  password             = "password"
+  vpc_security_group_ids = [aws_security_group.dbSg.id]
+  db_subnet_group_name = aws_db_subnet_group.mydb_subnet_group.name
+  skip_final_snapshot  = true
 }
