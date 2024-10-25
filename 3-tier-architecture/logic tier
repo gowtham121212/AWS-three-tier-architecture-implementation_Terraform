@@ -1,0 +1,28 @@
+const express = require('express');
+const mysql = require('mysql');
+const app = express();
+const port = 8080;
+
+// MySQL Database connection
+const db = mysql.createConnection({
+  host: 'mydb-instance.c4w7wvkp2z.us-east-1.rds.amazonaws.com',
+  user: 'admin',
+  password: 'password',
+  database: 'mydb'
+});
+
+// Example API endpoint
+app.get('/app/data', (req, res) => {
+  // Query the database for user data
+  db.query('SELECT * FROM users', (err, result) => {
+    if (err) {
+      return res.status(500).send('Database error');
+    }
+    res.json(result);
+  });
+});
+
+// Start the server
+app.listen(port, () => {
+  console.log(`App running on port ${port}`);
+});
